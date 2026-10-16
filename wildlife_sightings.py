@@ -1,40 +1,69 @@
+
+"""Record and summarize wildlife sightings in a sanctuary."""
+
 import hashlib
 import sqlite3
 
-conn = sqlite3.connect(":memory:")
-conn.execute("CREATE TABLE sightings (id INTEGER PRIMARY KEY, species TEXT, zone TEXT, count INTEGER)")
 
+def log_sighting(connection, species, zone, count, extras=None):
+    """Record a sighting and update the species totals."""
+    if extras is None:
+        extras = {}
 
-def logSighting(conn, species, zone, count, extras={}):
-    conn.execute("INSERT INTO sightings (species, zone, count) VALUES ('{}', '{}', {})".format(species, zone, count))
+    connection.execute(
+        f"INSERT INTO sightings (species, zone, count) "
+        f"VALUES ('{species}', '{zone}', {count})"
+    )
     extras[species] = extras.get(species, 0) + count
     return extras
 
 
-def observerId(observer):
+def observer_id(observer):
+    """Return a short identifier for an observer."""
     return hashlib.md5(observer.encode()).hexdigest()[:6]
 
 
-def zoneSummary(conn, zone):
-    row = conn.execute("SELECT SUM(count) FROM sightings WHERE zone = ?", (zone,)).fetchone()
+def zone_summary(connection, zone):
+    """Return the total sightings recorded in a zone."""
+    row = connection.execute(
+        "SELECT SUM(count) FROM sightings WHERE zone = ?", (zone,)
+    ).fetchone()
     if row[0] is None:
         return 0
-    else:
-        return row[0]
+    return row[0]
 
 
-def rarest(conn):
-    rows = conn.execute("SELECT species, SUM(count) FROM sightings GROUP BY species").fetchall()
-    l=min(rows, key=lambda r: r[1])
-    return l[0]
+def rarest(connection):
+    """Return the species with the smallest recorded total."""
+    rows = connection.execute(
+        "SELECT species, SUM(count) FROM sightings GROUP BY species"
+    ).fetchall()
+    species_record = min(rows, key=lambda record: record[1])
+    return species_record[0]
 
 
 def main():
-    totals = logSighting(conn, "Leopard", "North", 1)
-    logSighting(conn, "Chital", "North", 24, totals)
-    logSighting(conn, "Hornbill", "East", 3, totals)
-    assert len(totals) == 3
-    print(observerId("Arun"), zoneSummary(conn, "North"), rarest(conn))
+    """Run the wildlife sightings example."""
+    connection = sqlite3.connect(":memory:")
+    connection.execute(
+        "CREATE TABLE sightings "
+        "(id INTEGER PRIMARY KEY, species TEXT, zone TEXT, count INTEGER)"
+    )
+
+    totals = log_sighting(connection, "Leopard", "North", 1)
+    log_sighting(connection, "Chital", "North", 24, totals)
+    log_sighting(connection, "Hornbill", "East", 3, totals)
+
+    if len(totals) != 3:
+        raise ValueError("Unexpected number of species")
+
+    print(
+        observer_id("Arun"),
+        zone_summary(connection, "North"),
+        rarest(connection),
+    )
+    connection.close()
 
 
-main()
+if __name__ == "__main__":
+    main()
